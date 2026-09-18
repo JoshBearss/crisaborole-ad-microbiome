@@ -1,0 +1,907 @@
+---
+title: "16S gene analysis for Mesinkovska skin microbiome project"
+author: "Alberto Barron"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, cache = F)
+options(scipen=10000, digits = 12)
+set.seed(seed = 711)
+```
+
+#### Load packages
+```{r packages, message=FALSE, warning=FALSE, results='hold'}
+## First check that you have these packages installed before trying to load them
+library(tidyverse)
+library(phyloseq)
+library(ggplot2)
+library(vegan)
+library(dplyr)
+library(gplots)
+library(RColorBrewer)
+library(ggpubr)
+library(ggh4x)
+library(EcolUtils)
+library(biomformat)
+library(qiime2R)
+```
+
+#### Set global options
+- APA theme
+- Color palette
+- Set working directory
+```{r general settings}
+knitr::opts_chunk$set(echo = TRUE)
+
+apatheme=theme_bw()+
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        panel.border=element_blank(),
+        axis.line=element_line(),
+        text=element_text(family='Arial'))
+
+taxa_colors <- c(
+  "#CBD588", "#5F7FC7", "orange","#DA5724", "#508578", "#CD9BCD", 
+  "#AD6F3B", "#673770","#D14285", "#652926", "#C84248", 
+  "#8569D5", "#5E738F","#D1A33D", "#8A7C64", "#599861", "red",
+  "blue", "#483D8B", "gray", "darkcyan", "darkgoldenrod4", "green", "#8B0000",
+  "darkgreen", "yellow")
+
+setwd("/Users/apple/SyncFolder/skin")
+
+```
+
+### Load data into R
+
+In this step we unzip the files containd in the .qza artifacts, then import OTU table in BIOM format, taxonomy and metadata. Finally we create a 'phyloseq' object that contains the OTU table, taxonomy and metadata.
+```{r Load data; pre-porcessing and creating phyloseq object}
+## We will unzip our table.qza & taxonomy.qza file.
+## By default, qiime2 zips your data, along with provenance info, into a .qza or .qzv file.
+## For R to access the data, we need to unzip the files.
+## We only need to unzip the files once so after unziping we can comment the next two lines of code.
+## Modifiable within quotes, but should work if directory is correct.
+#unzip(zipfile = "table1.qza")
+## Modifiable within quotes, but should work if directory is correct.
+#unzip(zipfile = "taxonomy.qza")
+
+## Now we will import our OTU table by specifying the location of the .biom file, 
+## which was obtained from unzipping the table.qza file.
+## The OTU table contains the sequence IDs of each OTU and their frequency across your samples.
+my_biom<-read_hdf5_biom("b0033878-55ff-4736-8164-4686f4e4ce1c/data/feature-table.biom") ## Tab autocomplete is your friend! Change here within quotes.
+write_biom(my_biom, "formatted_biom")
+my_biom<-read_biom("formatted_biom")
+OTU_table<-as.data.frame(as.matrix(biom_data(my_biom))) %>%           ## Turn our biom file into a dataframe
+  rownames_to_column("Feature ID")                                      ## Give the rownames their own column
+write_delim(OTU_table, file = "OTU_table_unfiltered.tsv", delim = "\t") ## Save the dataframe to our computer
+## Next let's import taxonomy.
+## The taxonomy contains the taxa assigned to the OTU sequence ID.
+## Location of file modifiable in quotes.
+
+#OTU_taxonomy<-read.table("3059f12d-eb18-4b14-ac4d-2ac29c679002/data/taxonomy.tsv", header = T, sep = "\t")
+OTU_taxonomy <- read_qza("taxonomy.qza")
+
+# Parse the taxonomy table to be importable for 'phyloseq'
+OTU_taxonomy<-parse_taxonomy(OTU_taxonomy$data)
+OTU_taxonomy<-as.matrix(OTU_taxonomy)
+
+## Finally, let's import the metadata, this should be writen in the working directory as a .txt file with tabs a separators.
+metadata<-read.table("metadata.txt", header = TRUE, sep = '\t', row.names = 1)
+
+#get sample names in metadata
+metadata_sample_names<-row.names(metadata)
+#get sample names in OTU table
+OTUtab_sample_names<-colnames(OTU_table)
+OTUtab_sample_names<-OTUtab_sample_names[-1]
+#get shared sample names in metadata and OTU table
+shared_samples<-base::intersect(metadata_sample_names, OTUtab_sample_names)
+#get sample names in the OTU table NOT present in the metadata
+not_shared<-setdiff(OTUtab_sample_names, metadata_sample_names)
+#get sample names in the the metadata NOT present in OTU table
+missing_in_md<-setdiff(metadata_sample_names, OTUtab_sample_names)
+
+## Now let's remove the duplicated samples from the OTU table. These are all the columns whose name ends with "-2"
+## First let's create another table with those samples
+# get the sample IDs of the duplicates
+dup_ids<-sub(".{2}$", "", not_shared)
+#Create a vector with the columns to keep
+names.keep <- names(OTU_table)[(names(OTU_table) %in% dup_ids)]
+#subset OTU table
+OTU_tab_duplicates<-OTU_table[, names.keep]
+#add "Feature ID" column and move it to the first column
+OTU_tab_duplicates$`Feature ID`<-OTU_table$`Feature ID`
+OTU_tab_duplicates<-OTU_tab_duplicates %>% relocate(`Feature ID`)
+#get sample sums
+sampsums_dup<-colSums(OTU_tab_duplicates[,-1])
+
+
+# Let's compare the duplicate samples to know which ones to include
+
+#Create a vector with the columns to keep
+names.keep.dup <- names(OTU_table)[(names(OTU_table) %in% not_shared)]
+#subset OTU table
+OTU_tab_duplicates_1<-OTU_table[, names.keep.dup]
+#add "Feature ID" column and move it to the first column
+OTU_tab_duplicates_1$`Feature ID`<-OTU_table$`Feature ID`
+OTU_tab_duplicates_1<-OTU_tab_duplicates_1 %>% relocate(`Feature ID`)
+#get sample sums
+sampsums_dup1<-colSums(OTU_tab_duplicates_1[,-1])
+
+sampsums_dup_summary<-as.data.frame(cbind(sampsums_dup, sampsums_dup1))
+colSums(sampsums_dup_summary)
+```
+
+Sequence duplicates have more samples than the first ones, let's exclude the duplicate samples from the OTU table
+
+```{r include duplicates and remove original ones}
+#Create a vector with the columns to exclude
+names.exclude <- names(OTU_table)[!(names(OTU_table) %in% dup_ids)]
+#subset OTU table
+OTU_tab_filtered<-OTU_table[, names.exclude]
+
+# Rename samples to the original id to match the sample id in the metadata
+OTU_tab_filtered<-OTU_tab_filtered %>% rename_at(vars(not_shared), ~ dup_ids)
+
+## Now let's subset the metadata to remove the two samples not present in the OTU table
+metadata<-metadata[!rownames(metadata) %in% missing_in_md, ]
+## Confirm that the only difference between row names in the metadata and column names in the OTU table is the "Feature ID" column
+base::setdiff(colnames(OTU_tab_filtered), row.names(metadata))
+
+## Now let's create the phyloseq object with the OTU table, taxonomy and metadata.
+# Set column "Feature ID" as row names
+row.names(OTU_tab_filtered)<-OTU_tab_filtered$`Feature ID`
+# Remove first columns from OTU table as it has the Feature ID which now are the row names
+OTU_tab_filtered<-OTU_tab_filtered[,-1]
+#Create 'phyloseq' importable objects
+OTUtab<-otu_table(OTU_tab_filtered, taxa_are_rows = T)
+tax<-tax_table(OTU_taxonomy)
+sam_data<-sample_data(metadata)
+#create 'phyloseq' object and check that metadata and taxonomy are imported correctly
+dat<-phyloseq(OTUtab, tax, sam_data)
+dat
+```
+### Creating new variables in the metadata with the detailed metadata from each subject
+
+Before continuing with the processing of the OTU table and diversity analysis we need to match some information about the subjects contained in the detailed metadata to their corresponding subject in the OTU table metadata.
+
+```{r processing matadata}
+## First let's remove uninformative collumns in the metadata (columns with technical information about the library preparation)
+dat@sam_data<-dat@sam_data[,-c(5:16)]
+# Get summary of the metadata
+summary(dat@sam_data)
+# Assign categorical variables
+dat@sam_data$subject<-factor(dat@sam_data$subject)
+dat@sam_data$Timepoint<-factor(dat@sam_data$Timepoint)
+dat@sam_data$Treatment<-factor(dat@sam_data$Treatment)
+
+## Now, let's load the detailed metadata
+det_md<-read.table("detailed_metadata.txt", header = TRUE, sep = '\t', colClasses = "factor")
+
+dat@sam_data$smplename<-row.names(as.data.frame(as.matrix(dat@sam_data)))
+
+mdf<-merge(as.data.frame(as.matrix(dat@sam_data)), det_md, by.x="subject", by.y="SubjectID", all.x=TRUE) %>%
+#mdf <- mdf %>% 
+  mutate(Asthma = recode(Asthma, no = "No")) %>%
+  mutate(Food_allergies = recode(Food_allergies, no = "No")) %>%
+  mutate(Family_history_Asthma = recode(Family_history_Asthma, no = "No")) %>%
+  mutate(Family_history_allergic_rhinitis = recode(Family_history_allergic_rhinitis, yes = "Yes")) %>%
+  mutate(Family_history_food_allergies = recode(Family_history_food_allergies, no = "No")) %>%
+  mutate(Family_history_AD = recode(Family_history_AD, yes = "Yes")) %>%
+  column_to_rownames("smplename")
+
+summary(mdf)
+dat@sam_data<-sample_data(mdf)
+
+## Finally check that all new variables had been assigned correctly and coded as factorial variable
+summary(dat@sam_data)
+```
+
+### Rarefaction curves
+
+Now that we have formatted the metadata and added informative variables, let's see create some rarefaction curves to visualize ASV diversity as a function of the number of sequences in each sample. For this we will use the 'rarecurve' function od the package 'vegan' to calculate the rarefaction curves. A dashed red line is drawn at the rarefaction depth that we have chosen, **3251 sequences**.
+
+```{r Rarefaction curves, fig.width=12}
+tab<-otu_table(dat)
+class(tab)<-"matrix"
+tab<-t(tab)
+
+rar_curve_df <- rarecurve(tab, step = 1000, label = F, sample = 3514, xlab = "Read Depth", col = "orange", tidy = TRUE)
+
+rar_curves<- rar_curve_df %>%
+  filter(!Site %in% c("lysis-buffer", "lysis-buffer-2", "Mock", "Mock2",  "negative", "negative2")) %>%
+  ggplot(aes(x=Sample, y=Species, group = Site)) + 
+  geom_line() +
+  geom_vline(xintercept = 3251, color = "red", linetype = "dashed") +
+  #ggbreak::scale_x_cut(c(60000), which = c(2), scales = c(0.5, 2)) +
+  labs(x="Number of sequences", y="Number of ASVs") +
+  guides(fill="none") +
+  apatheme +
+  theme(legend.position = "bottom", 
+        legend.title=element_blank(),
+        text=element_text(size=12)
+        #,
+        #axis.text.x = element_text(angle=90, hjust=1, vjust=.5)
+        )
+print(rar_curves)
+
+ggsave("Rarefaction_curve.svg",
+       width = 25,
+       height = 20,
+       units = "cm",
+       dpi = 600)
+
+
+```
+
+### Pre-processing for diversity analysis
+
+#### Removing undesired sequences
+
+Before proceeding with the diversity analysis we have to remove eukaryotic sequences (Chloroplasts and Mitochondria), sequences not classified and finally rarefy the OTU table.
+
+```{r  sequence count and removing eukaryotic sequences}
+
+#identify and count plant-derived sequences
+data_chll<-subset_taxa(dat, Genus == "Chloroplast")
+ntaxa(data_chll)
+chl_sums<-sum(sample_sums(data_chll))
+chl_sums
+
+data_mit<-subset_taxa(dat, Genus == "Mitochondria")
+ntaxa(data_mit)
+mit_sums<-sum(sample_sums(data_mit))
+mit_sums
+
+data_euk<-subset_taxa(dat, Kingdom == "d__Eukaryota")
+ntaxa(data_euk)
+euk_sums<-sum(sample_sums(data_euk))
+euk_sums
+
+euk_derived_seqs<-chl_sums + mit_sums + euk_sums
+euk_derived_seqs
+
+#Check total sequences count before removing Eukaryota derived sequences
+total_seqs<-sum(sample_sums(dat))
+total_seqs
+
+#calculate % of plant-derived seqs
+(euk_derived_seqs/total_seqs)*100
+
+#remove Chloroplast & Mitochondria identified OTUs and unassigned OTUs at the Kingdom level
+dat<-subset_taxa(dat, (Genus!="Chloroplast" | is.na(Genus)))
+ntaxa(dat)
+
+dat<-subset_taxa(dat, (Genus!="Mitochondria" | is.na(Genus)))
+ntaxa(dat)
+
+dat<-subset_taxa(dat, (Kingdom!="d__Eukaryota" | is.na(Kingdom)))
+ntaxa(dat)
+
+dat<-subset_taxa(dat, (Kingdom!="Unassigned" | is.na(Kingdom)))
+ntaxa(dat)
+
+# Total sequences after removing undesired sequences 
+sum(sample_sums(dat))
+
+## Check for the lowest sequence count
+min(sample_sums(dat))          #check lowest sequence count to rarefy
+#[1] 2655                       #minimum sequence count too low
+
+## Let's check how the sequencing and extraction controls look.
+## Let's create a table that contains sequence count per sample and the gel result information from the metadata
+sampsums<-as.data.frame(sort(sample_sums(dat)))
+sampsums$sample_id<-row.names(sampsums)
+sampsums$gel_result<-metadata$gel_result_16S[match(sampsums$sample_id, row.names(metadata))]
+names(sampsums)[1]<-"count"
+
+as.data.frame((head(sampsums[,-2])))
+```
+
+Lowest sequence count is a negative control, we will rarefy to the next lowest sequences count, **3251** .
+
+```{r, fig.width=12}
+## let's check how many samples have a "not present" gel result on the metadata
+table(sampsums$gel_result)
+# 34 samples have a "not present" gel result
+
+# Now let's check how many samples have a "not present" gel result and have a sequence count below the sequence count of the highest sequence count in the controls
+# lysis-buffer: sequence count = 16120
+length(which(sampsums$count < 16113 & sampsums$gel_result == "not present"))
+# 15 samples fulfill both criteria
+
+# Now let's get the name of these samples, since we will exclude these samples from further analysis
+samps_to_rm<-row.names(sampsums[which(sampsums$count < 16113 & sampsums$gel_result == "not present"),])
+samps_to_rm
+
+## Now let's plot the sequence count
+ggplot(data = sampsums, aes(x = reorder(sample_id, count), y = count)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Sample Id", y = "Sequence count") +
+  geom_hline(yintercept = 3251, color = "red", linetype = "dashed") +
+  ggbreak::scale_y_cut(c(50000), which = c(2), scales = c(3, 0.5)) +
+  apatheme +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggsave("seq_count_by_sample.svg",
+       width = 50,
+       height = 25,
+       units = "cm",
+       dpi = 600)
+```
+
+From the sequence count and the gel result information we can see that the highest sequence count in the control samples is the lysis-buffer  (16120 sequences). We will rarefy to the lowest sequence count in a sample (3251). We will also remove all the samples that have a sequence count below lysis-buffer  (16113 sequences) **AND** have a "not present" gel result (15 samples).
+
+### Rarefaction of OTU table
+
+```{r Rarefaction, message=FALSE, warning=FALSE, results='hide'}
+
+rar_table<-data.frame(t(rrarefy.perm(data.frame(t(dat@otu_table)),
+                                     sample = 3251, n = 100,
+                                     round.out = T)))
+rar_table<-rar_table[rowSums(rar_table)!=0,]
+colnames(rar_table)<-gsub("\\.", "-", colnames(rar_table))
+colnames(rar_table)<-sub("X", "", colnames(rar_table))
+rownames(rar_table)<-sub("X", "", rownames(rar_table))
+
+rar_data<-phyloseq(sample_data(dat@sam_data),
+                   otu_table(as.matrix(rar_table), taxa_are_rows = T),
+                   tax_table(dat@tax_table))
+
+rar_data
+
+#check for sample sums in rarefied table
+sort(sample_sums(rar_data))
+
+## Now, let's remove the samples we decided to exclude
+
+rar_data<-prune_samples(!(sample_names(rar_data) %in% samps_to_rm), rar_data)
+rar_data
+```
+
+Now let's count how many ASVs and Samples we have after rarefaction.
+
+```{r counting ASVs and samples before and after rarefaction}
+## Number of ASVs before rarefaction
+length(taxa_names(dat))
+
+## Number of ASVs after rarefaction
+length(taxa_names(rar_data))
+
+## Number of samples before rarefaction
+length(row.names(dat@sam_data))
+
+## Number of samples after rarefaction
+length(row.names(rar_data@sam_data))
+
+```
+
+#### Counting samples in each group
+
+```{r Counting samples}
+
+## Counting samples by subject
+rar_data@sam_data %>%
+  group_by(subject) %>%
+  tally() %>%
+  print(n = 23)
+
+## Counting samples by treatment
+rar_data@sam_data %>%
+  group_by(Treatment) %>%
+  tally()
+
+## Counting samples by timepoint
+rar_data@sam_data %>%
+  group_by(Timepoint) %>%
+  tally()
+
+## Counting samples by subject and treatment
+rar_data@sam_data %>%
+  group_by(subject, Treatment) %>%
+  tally() %>%
+  print(n = 43)
+
+## Counting samples by Treatment and Timepoint
+rar_data@sam_data %>%
+  group_by(Timepoint, Treatment) %>%
+  tally()
+
+## Counting samples by Gender
+rar_data@sam_data %>%
+  group_by(Gender) %>%
+  tally()
+
+## Counting samples by Gender and Treatment
+rar_data@sam_data %>%
+  group_by(Gender, Treatment) %>%
+  tally()
+
+## Counting samples by Race
+rar_data@sam_data %>%
+  group_by(Race) %>%
+  tally()
+
+## Counting samples by Gender and Race
+rar_data@sam_data %>%
+  group_by(Gender, Race) %>%
+  tally()
+
+## Counting samples by Asthma diagnostic 
+rar_data@sam_data %>%
+  group_by(Asthma) %>%
+  tally()
+
+## Counting samples by Rhinitis diagnostic 
+rar_data@sam_data %>%
+  group_by(Allergic_Rhinitis) %>%
+  tally()
+
+## Counting samples by Rhinitis diagnostic and Treatment
+rar_data@sam_data %>%
+  group_by(Allergic_Rhinitis, Treatment) %>%
+  tally()
+
+## Counting samples by Food Allergies
+rar_data@sam_data %>%
+  group_by(Food_allergies) %>%
+  tally()
+
+## Counting samples by Family Asthma history
+rar_data@sam_data %>%
+  group_by(Family_history_Asthma) %>%
+  tally()
+
+## Counting samples by Family Rhinitis history
+rar_data@sam_data %>%
+  group_by(Family_history_allergic_rhinitis) %>%
+  tally()
+
+## Counting samples by Family Rhinitis history and Treatment
+rar_data@sam_data %>%
+  group_by(Family_history_allergic_rhinitis, Treatment) %>%
+  tally()
+
+## Counting samples by Family food allergies history
+rar_data@sam_data %>%
+  group_by(Family_history_food_allergies) %>%
+  tally()
+
+## Counting samples by Family history of AD
+rar_data@sam_data %>%
+  group_by(Family_history_AD) %>%
+  tally()
+```
+
+## Diversity analysis
+
+### Alpha Diversity
+
+Now let's proceed with the alpha diversity analysis. For this we will calculate the Shannon diversity index and a few other indexes used to measure alpha diversity.
+
+#### Shannon-Weinner diversity index
+
+```{r Alpha diversity analyisis - Shannon index}
+# Calculate alpha diversity analysis and reformat sample names
+divdf<-estimate_richness(rar_data, measures = c("Observed", "Chao1", "Shannon", "Simpson", "InvSimpson"))
+rownames(divdf)<-gsub("\\.", "-", row.names(divdf))
+rownames(divdf)<-sub("X", "", row.names(divdf))
+# Add metadata information to the newly created data frame with the calculated values
+divdf<-cbind(divdf, rar_data@sam_data)
+```
+
+##### Shannon diversity values per treatment
+
+```{r Shannon diversity values per treatment}
+div_treatment<-ggplot(data = divdf, aes(x = Treatment, y = Shannon, fill = Treatment)) +
+  geom_boxplot() +
+  geom_point(position = position_jitterdodge()) +
+  apatheme
+
+print(div_treatment)
+
+ggsave("shannon_by_treatment.svg",
+       width = 20,
+       height = 20,
+       units = "cm",
+       dpi = 600)
+
+## t.test to compare Shannon diversity values between treated and untreated
+
+#ƒ First let's check for normal distribution of Shannon diversity values
+shapiro.test(divdf$Shannon)
+# For each group
+shapiro.test(divdf[which(divdf$Treatment == "T"), 4])
+shapiro.test(divdf[which(divdf$Treatment == "U"), 4])
+
+## Shannon diversity is has a normal distribution let's proceed with the t test
+divdf_nc <- divdf %>% filter(Timepoint != "na")
+
+t.test(Shannon ~ Treatment, data = divdf_nc)
+
+```
+No significant differences between Treated and Untreated samples in terms of Shannon index values.
+
+##### Shannon diversity values per treatment and subjects
+
+```{r Shannon diversity values per treatment and subjects}
+
+div_treat_sub<-ggplot(data = divdf, aes(x = subject, y = Shannon, fill = Treatment)) +
+  geom_boxplot() +
+  geom_point(position = position_jitterdodge()) +
+  apatheme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(div_treat_sub)
+
+ggsave("shannon_by_treatmentANDsubject.svg",
+       width = 20,
+       height = 20,
+       units = "cm",
+       dpi = 600)
+
+## Now let's test for an interactive effect between treatment and subject with a 2-way ANOVA
+
+car::Anova(aov(Shannon ~ Treatment*subject, data = divdf_nc), type = "III")
+```
+When testing the interaction between Treatment and subject with a 2-way ANOVA only the 'subject' factor is significant and the interaction is not significant.
+
+
+##### Shannon diversity values per treatment, time point and subject
+
+```{r Shannon diversity values per treatment time point and subject}
+div_treat_sub_time<-ggplot(data = divdf,
+                           aes(x = Timepoint, y = Shannon,
+                               color = Treatment,
+                               group = Treatment,
+                               shape = Treatment)) +
+                      geom_point() +
+                      geom_line() +
+                      facet_wrap(~subject) +
+                      apatheme
+
+print(div_treat_sub_time)
+
+ggsave("shannon_by_treatmentANDsubjectANDtimepoint.svg",
+       width = 20,
+       height = 20,
+       units = "cm",
+       dpi = 600)
+```
+
+##### Shannon diversity means +/- sd per treatment and time point
+
+```{r Shannon diversity means +/- sd per treatment and time point}
+## Now, let's plot Shannon diversity means +/- sd per treatment and time point
+# Before that we have to calculate the mean and sd for each time point and treatment
+divsum<-divdf %>%
+  dplyr::group_by(Timepoint, Treatment) %>%
+  dplyr::summarize(avg = mean(Shannon),
+                   n = dplyr::n(),
+                   sd = sd(Shannon))
+## Now we can plot the means and sd per time point and treatment
+divsum_treat_time<-ggplot(data = divsum,
+                           aes(x = Timepoint, y = avg,
+                               color = Treatment,
+                               group = Treatment,
+                               shape = Treatment)) +
+                      geom_point() +
+                      geom_line() +
+                      geom_errorbar(aes(ymin = avg-sd, ymax = avg+sd), width = .2) +
+                      ylab("Shannon") +
+                      apatheme
+
+print(divsum_treat_time)
+
+ggsave("shannon_by_treatmentANDtimepoint_means.svg",
+       width = 20,
+       height = 20,
+       units = "cm",
+       dpi = 600)
+
+# Finally let's test the interaction between Timepoint ans treatment
+car::Anova(aov(Shannon ~ Treatment*Timepoint, data = divdf_nc), type = "III")
+```
+No significant effect of Treatment or Time point on the Shannon index values.
+
+#### Observed richness
+
+##### Observed OTUs values per treatment
+
+```{r Alpha diversity analyisis - Observed richness}
+divO_treatment<-ggplot(data = divdf, aes(x = Treatment, y = Observed, fill = Treatment)) +
+  geom_boxplot() +
+  geom_point(position = position_jitterdodge()) +
+  apatheme
+
+print(divO_treatment)
+
+ggsave("richness_by_treatment.svg",
+       width = 20,
+       height = 20,
+       units = "cm",
+       dpi = 600)
+
+## t.test to compare Observed richness values between treated and untreated
+
+# First let's check for normal distribution of Observed richness values
+shapiro.test(divdf$Observed)
+# For each group
+shapiro.test(divdf[which(divdf$Treatment == "T"), 1])
+shapiro.test(divdf[which(divdf$Treatment == "U"), 1])
+
+# Observed richness doesn't have a normal distribution let's log transform it and see how it looks
+shapiro.test(log(divdf$Observed))
+# For each group
+shapiro.test(log(divdf[which(divdf$Treatment == "T"), 1]))
+shapiro.test(log(divdf[which(divdf$Treatment == "U"), 1])) 
+
+##  Log transformed Observed richness has a normal distribution let's proceed with the t.test
+
+
+t.test(log(Observed) ~ Treatment, data = divdf_nc)
+
+```
+
+No significant differences between Treated and Untreated samples in terms of log transformed Observed richness values.
+
+##### Observed OTUs per treatment and subjects
+
+```{r Observed OTUs per treatment and subjects}
+divO_treat_sub<-ggplot(data = divdf, aes(x = subject, y = Observed, fill = Treatment)) +
+  geom_boxplot() +
+  geom_point(position = position_jitterdodge()) +
+  apatheme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(divO_treat_sub)
+
+ggsave("richness_by_treatmentANDsubject.svg",
+       width = 20,
+       height = 20,
+       units = "cm",
+       dpi = 600)
+
+car::Anova(aov(log(Observed) ~ Treatment*subject, data = divdf_nc), type = "III")
+```
+
+When testing the interaction between Treatment and subject with a 2-way ANOVA only the 'subject' factor is significant and the interaction is not significant.
+
+##### Observed OTUs per treatment, time point and subjects
+
+```{r Observed OTUs per treatment timepoint and subject}
+divO_treat_sub_time<-ggplot(data = divdf,
+                           aes(x = Timepoint, y = Observed,
+                               color = Treatment,
+                               group = Treatment,
+                               shape = Treatment)) +
+                      geom_point() +
+                      geom_line() +
+                      facet_wrap(~subject) +
+                      apatheme
+
+print(divO_treat_sub_time)
+
+ggsave("richness_by_treatmentANDsubjectANDtimepoint.svg",
+       width = 20,
+       height = 20,
+       units = "cm",
+       dpi = 600)
+```
+
+##### Observed OTUs means +/- sd per treatment and time point
+
+```{r Observed OTUs means +/- sd per treatment and time point}
+## Now, let's plot Shannon diversity means +/- sd per treatment and time point
+# Before that we have to calculate the mean and sd for each time point and treatment
+divsumO<-divdf %>%
+  dplyr::group_by(Timepoint, Treatment) %>%
+  dplyr::summarize(avg = mean(Observed),
+                   n = dplyr::n(),
+                   sd = sd(Observed))
+## Now we can plot the means and sd per tiempoint and treatment
+divsumO_treat_time<-ggplot(data = divsumO,
+                           aes(x = Timepoint, y = avg,
+                               color = Treatment,
+                               group = Treatment,
+                               shape = Treatment)) +
+                      geom_point() +
+                      geom_line() +
+                      geom_errorbar(aes(ymin = avg-sd,
+                                        ymax = avg+sd),
+                                    width = .2) +
+                      ylab("Observed") +
+                      apatheme
+
+print(divsumO_treat_time)
+
+ggsave("richness_by_treatmentANDtimepoint_means.svg",
+       width = 20,
+       height = 20,
+       units = "cm",
+       dpi = 600)
+
+# Finally let's test the interaction between Timepoint ans treatment
+car::Anova(aov(log(Observed) ~ Treatment*Timepoint, data = divdf_nc), type = "III")
+```
+No significant effect of Treatment or Time point on the log transformed Observed richness values.
+
+### Taxa Barplots
+
+#### Genus level
+
+Taxa bar plot at the genus level. OTUs with < 0.75% abundance excluded.
+
+```{r taxa bar plots, fig.width=12}
+genus_data<-rar_data %>%
+  tax_glom(taxrank = "Genus")#agglomerate at genus level
+phy_g<-transform_sample_counts(genus_data, function(x) {x/sum(x)} )  #transform to relative abundance
+phy_gf<-filter_taxa(phy_g, function(x) mean(x) < 0.0075, TRUE) #filter out Phyla with < 1% abundance
+rmtaxa<-taxa_names(phy_gf)
+alltaxa<-taxa_names(phy_g)
+mytaxa<-alltaxa[!alltaxa %in% rmtaxa]
+
+phy_gf_0.01<-prune_taxa(mytaxa, phy_g) #prune phyla below 0.75% in each sample
+
+phy_gf_0.01<-transform_sample_counts(phy_gf_0.01, function(x) {x/sum(x)} ) %>% #transform to relative abundance
+  psmelt() %>% #melt to long format
+  arrange(Genus) #sort data frame alphabetically by genus
+phy_gf_0.01$Timepoint<-factor(phy_gf_0.01$Timepoint, levels = c("V2", "V3", "V4", "V5", "V6", "na"))
+
+genus_names<-sort(unique(phy_gf_0.01$Genus))
+genus_names[2]<-"Rhizobium"
+
+sample_labels<-phy_gf@sam_data[with(phy_gf@sam_data, order(subject, Treatment, Timepoint)),]
+
+#make plot
+#phy_gf_0.01 %>%
+ # mutate(Sample = factor(Sample, levels = row.names(sample_labels))) %>%
+  ggplot(phy_gf_0.01[!(phy_gf_0.01$Timepoint == "na"),],
+                      aes(x = Sample, y = Abundance, fill = Genus)) +
+  geom_bar(stat = "identity") + 
+  scale_fill_manual(values = taxa_colors, labels = genus_names) +
+  #theme_bw() +
+  facet_nested(~ subject + Treatment, scale = "free", space = "free_x") +
+  #facet_grid(~Treatment, scale = "free", space = "free_x") +
+  xlab("Timepoints") +
+  scale_x_discrete(labels = sample_labels$Timepoint) +
+  scale_y_continuous(labels = scales::percent) + ylab("Abundance (%)") +
+  theme_bw() +
+  theme(panel.spacing = unit(0.125,"line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth=0.25),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle=90, hjust=1)
+        #axis.text.x = element_blank()
+        )
+
+#print(barplot_genus)
+
+ggsave("taxa_barplot_genus.svg",
+       width = 50,
+       height = 25,
+       units = "cm",
+       dpi = 600)
+
+```
+
+### Beta diversity analysis
+
+Finally, let's compare the composition of the samples across the different experimental factors
+
+```{r remove control samples}
+## Before comparing the composition of the communities we have to subset the control samples so they don't obscure the analysis
+
+rar_data<-subset_samples(rar_data, Timepoint!="na")
+rar_data
+```
+
+###### Exporting Bray-Curtis distance matrix to perfom PERMANOVAS in PRIMER+ (this is the way)
+
+```{r Export data for PRIMER+}
+## Export distance matrix to import into PRIMER with associated metadata
+
+## This is meant to be run ONLY ONCE to export the matrix and metadata to .csv files, that's why it's commented 
+#OTU_bray<-as.data.frame(as.matrix(vegdist(as.data.frame(t(rar_data@otu_table)), method = "bray")))
+#write.csv(OTU_bray, "bray_matrix.csv", quote = FALSE)
+#md4pr<-data.frame(rar_data@sam_data)
+#md4pr<-md4pr %>% dplyr::mutate(GenderBin = ifelse(Gender == "M", 0, 1)) %>%
+#  dplyr::mutate(Hispanic.LatinoBin = ifelse(Hispanic.Latino == "Yes", 1, 0)) %>%
+#  dplyr::mutate(AsthmaBin = ifelse(Asthma == "Yes", 1, 0)) %>%
+#  dplyr::mutate(RhinitisBin = ifelse(Rhinitis == "Yes", 1, 0)) %>%
+#  dplyr::mutate(FoodAllergiesBin = ifelse(Food_allergies == "Yes", 1, 0)) %>%
+#  dplyr::mutate(FammilyAsthmaBin = ifelse(Family_asthma == "Yes", 1, 0)) %>%
+#  dplyr::mutate(FamilyRhinitisBin = ifelse(Family_rhinitis == "Yes", 1, 0)) %>%
+#  dplyr::mutate(Fammily_FoodAllergiesBin = ifelse(Family_Food_allergies == "Yes", 1, 0)) %>%
+#  dplyr::mutate(Family_ADBin = ifelse(Family_AD == "Yes", 1, 0)) %>%
+#  dplyr::mutate(TimepointNum = ifelse(Timepoint == "V2", 2,
+#                                                     ifelse(Timepoint == "V3", 3,
+#                                                            ifelse(Timepoint == "V4", 4,
+#                                                                   ifelse(Timepoint == "V5", 5, 6)))))
+#write.csv(md4pr, "bray_metadata.csv", quote = FALSE)
+
+```
+
+##### NMDS plot by Treatment
+
+```{r calculate NMDS, results='hide'}
+nmds<-ordinate(rar_data,
+               method = "NMDS",
+               distance = "bray",
+               weighted = TRUE)
+nmds_df<-plot_ordination(rar_data, nmds, justDF = TRUE)
+```
+```{r NMDS by Treatment}
+nmds_plot<-ggplot() +
+  geom_point(data = nmds_df,aes(x=NMDS1, y=NMDS2,
+                                color = Treatment,
+                                ),
+             size = 4, alpha = 0.75, show.legend = TRUE) +
+  scale_color_manual(values = taxa_colors) +
+  annotate("text", x = -0.4 , y = -0.2, label = paste("Stress =",round(nmds$stress, digits = 3)), size = 3.5) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+print(nmds_plot)
+
+ggsave("nmds_by_treatment.svg",
+       width = 20,
+       height = 20,
+       units = "cm",
+       dpi = 600)
+```
+
+##### NMDS plot by Subject and Treatment
+
+```{r NMDS plot by Subject, fig.width=8, fig.height=8}
+nmds_plot_sub<-ggplot() +
+  geom_point(data = nmds_df,aes(x=NMDS1, y=NMDS2,
+                                color = subject,
+                                shape = Treatment
+                                ),
+             size = 4, alpha = 0.75, show.legend = TRUE) +
+  scale_color_manual(values = taxa_colors) +
+  theme_bw() +
+  annotate("text", x = -0.4 , y = -0.2, label = paste("Stress =",round(nmds$stress, digits = 3)), size = 3.5) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+print(nmds_plot_sub)
+
+ggsave("nmds_by_subject.svg",
+       width = 20,
+       height = 20,
+       units = "cm",
+       dpi = 600)
+```
+
+#### NMDS plot by treatment and faceted by Subject
+```{r NMDS plot by treatment and faceted by Subject}
+nmds_plot_sub_fac<-ggplot() +
+  geom_point(data = nmds_df,aes(x=NMDS1, y=NMDS2,
+                                color = Treatment,
+                                #shape = Treatment
+                                ),
+             size = 2.5, alpha = 0.75, show.legend = TRUE) +
+  scale_color_manual(values = taxa_colors) +
+  geom_text(data = nmds_df, #add sample ID labels
+            aes(x=NMDS1, y=NMDS2-0.005, label=Timepoint), size=2.5, show.legend = F) +
+  #annotate("text", x = -0.17 , y = -0.12, label = "Stress = 0.227", size = 2.5) +
+  facet_wrap(~subject) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+print(nmds_plot_sub_fac)
+
+ggsave("nmds_by_treatment_facetby_subject.svg",
+       width = 35,
+       height = 30,
+       units = "cm",
+       dpi = 600)
+```
+
+

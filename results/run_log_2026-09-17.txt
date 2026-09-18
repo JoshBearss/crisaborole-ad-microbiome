@@ -1,0 +1,137 @@
+START 2026-09-17 17:43:04 
+ANCOMBC 2.10.1  phyloseq 1.52.0  R R version 4.5.1 (2025-06-13) 
+physeq_paired: 142 samples, 903 genera 
+physeq_notV2: 118 samples 
+RUN A_notV2_treat_randSubject_prv05 | fix = treatment | rand = (1|Subject_ID) | prv_cut = 0.05 | n = 118 | 2026-09-17 17:43:28 
+  taxa tested: 225 | elapsed 4.2 min 
+               taxon lfc_treatmentTreated se_treatmentTreated p_treatmentTreated
+    g__Cutibacterium               1.1522              0.4137           0.006444
+ g__Chryseobacterium              -0.9313              0.6226           0.144526
+   g__Staphylococcus               1.0444              0.4451           0.020955
+        g__Dialister               0.8735              0.5652           0.133947
+ q_treatmentTreated
+             0.2580
+             0.8335
+             0.6735
+             0.8335 
+RUN B_notV2_treat_noRand_prv05 | fix = treatment | rand = NULL | prv_cut = 0.05 | n = 118 | 2026-09-17 17:47:41 
+  taxa tested: 225 | elapsed 0.3 min 
+               taxon lfc_treatmentTreated se_treatmentTreated p_treatmentTreated
+    g__Cutibacterium               0.8058              0.4156          5.495e-02
+ g__Chryseobacterium              -1.2754              0.2121          1.046e-06
+   g__Staphylococcus               0.7107              0.4251          9.728e-02
+        g__Dialister               0.2794              0.1838          1.395e-01
+ q_treatmentTreated
+          8.769e-02
+          5.708e-05
+          1.412e-01
+          1.950e-01 
+RUN C_notV2_treat_randSubjVisit_prv05 | fix = treatment | rand = (1|Subject_ID) + (1|visit) | prv_cut = 0.05 | n = 118 | 2026-09-17 17:47:58 
+  taxa tested: 225 | elapsed 5.4 min 
+               taxon lfc_treatmentTreated se_treatmentTreated p_treatmentTreated
+    g__Cutibacterium               1.2340              0.3119          0.0001479
+ g__Chryseobacterium              -0.8519              0.5626          0.1397905
+   g__Staphylococcus               1.1231              0.3556          0.0021045
+        g__Dialister               0.9553              0.4989          0.0661829
+ q_treatmentTreated
+           0.006657
+           0.562453
+           0.078919
+           0.532889 
+RUN D_V2_treat_noRand_prv05 | fix = treatment | rand = NULL | prv_cut = 0.05 | n = 24 | 2026-09-17 17:53:24 
+  taxa tested: 132 | elapsed 0.2 min 
+               taxon lfc_treatmentTreated se_treatmentTreated p_treatmentTreated
+    g__Cutibacterium               0.4807              0.8426            0.57415
+ g__Chryseobacterium               0.3893              0.3181            0.34566
+   g__Staphylococcus               0.6106              0.8058            0.45664
+        g__Dialister               2.3849              0.4027            0.02735
+ q_treatmentTreated
+             1.0000
+             0.9250
+             1.0000
+             0.3009 
+RUN E_V2_treat_randSubject_prv05 | fix = treatment | rand = (1|Subject_ID) | prv_cut = 0.05 | n = 24 | 2026-09-17 17:53:33 
+  ERROR: Encountering the error for `lmerTest` package.
+Please try to select one of your taxa and use its raw counts to fix the same linear mixed-effects model using `lmerTest` without the `ANCOMBC` package.
+Load all necessary packages EXCEPT `ANCOMBC`, and see if the error arises due to package incompatibility or other issues.
+The error message from `lmerTest` is as follows:
+number of levels of each grouping factor must be < number of observations (problems: Subject_ID) 
+RUN D_V3_treat_noRand_prv05 | fix = treatment | rand = NULL | prv_cut = 0.05 | n = 34 | 2026-09-17 17:54:06 
+  taxa tested: 218 | elapsed 0.3 min 
+               taxon lfc_treatmentTreated se_treatmentTreated p_treatmentTreated
+    g__Cutibacterium               0.6753              0.7993           0.404654
+ g__Chryseobacterium              -0.1108              0.4586           0.814482
+   g__Staphylococcus               1.2054              0.8113           0.147106
+        g__Dialister               1.6996              0.2547           0.001141
+ q_treatmentTreated
+            0.87341
+            1.00000
+            0.44540
+            0.03965 
+RUN E_V3_treat_randSubject_prv05 | fix = treatment | rand = (1|Subject_ID) | prv_cut = 0.05 | n = 34 | 2026-09-17 17:54:23 
+  ERROR: Encountering the error for `lmerTest` package.
+Please try to select one of your taxa and use its raw counts to fix the same linear mixed-effects model using `lmerTest` without the `ANCOMBC` package.
+Load all necessary packages EXCEPT `ANCOMBC`, and see if the error arises due to package incompatibility or other issues.
+The error message from `lmerTest` is as follows:
+number of levels of each grouping factor must be < number of observations (problems: Subject_ID) 
+RUN D_V4_treat_noRand_prv05 | fix = treatment | rand = NULL | prv_cut = 0.05 | n = 24 | 2026-09-17 17:55:13 
+  taxa tested: 192 | elapsed 0.2 min 
+               taxon lfc_treatmentTreated se_treatmentTreated p_treatmentTreated
+    g__Cutibacterium               0.5086              0.9540            0.59926
+ g__Chryseobacterium              -0.8748              0.3973            0.06357
+   g__Staphylococcus               0.8276              0.9305            0.38338
+        g__Dialister               0.6931              0.2483            0.21900
+ q_treatmentTreated
+             1.0000
+             0.2743
+             0.8660
+             0.5840 
+RUN E_V4_treat_randSubject_prv05 | fix = treatment | rand = (1|Subject_ID) | prv_cut = 0.05 | n = 24 | 2026-09-17 17:55:26 
+  taxa tested: 192 | elapsed 3 min 
+               taxon lfc_treatmentTreated se_treatmentTreated p_treatmentTreated
+    g__Cutibacterium               0.6998              0.5747             0.2488
+ g__Chryseobacterium              -0.5514              0.6362             0.4872
+   g__Staphylococcus               1.0188              0.6125             0.1245
+        g__Dialister                   NA                  NA             1.0000
+ q_treatmentTreated
+                  1
+                  1
+                  1
+                  1 
+RUN D_V5_treat_noRand_prv05 | fix = treatment | rand = NULL | prv_cut = 0.05 | n = 28 | 2026-09-17 17:58:24 
+  taxa tested: 246 | elapsed 0.3 min 
+               taxon lfc_treatmentTreated se_treatmentTreated p_treatmentTreated
+    g__Cutibacterium               2.2074              0.7390          6.073e-03
+ g__Chryseobacterium               0.2869              0.2751          3.447e-01
+   g__Staphylococcus               1.9773              0.7530          1.429e-02
+        g__Dialister               2.4027              0.2782          5.572e-05
+ q_treatmentTreated
+           0.095241
+           0.724752
+           0.130176
+           0.006854 
+RUN E_V5_treat_randSubject_prv05 | fix = treatment | rand = (1|Subject_ID) | prv_cut = 0.05 | n = 28 | 2026-09-17 17:58:41 
+  ERROR: Encountering the error for `lmerTest` package.
+Please try to select one of your taxa and use its raw counts to fix the same linear mixed-effects model using `lmerTest` without the `ANCOMBC` package.
+Load all necessary packages EXCEPT `ANCOMBC`, and see if the error arises due to package incompatibility or other issues.
+The error message from `lmerTest` is as follows:
+number of levels of each grouping factor must be < number of observations (problems: Subject_ID) 
+RUN D_V6_treat_noRand_prv05 | fix = treatment | rand = NULL | prv_cut = 0.05 | n = 32 | 2026-09-17 17:59:37 
+  taxa tested: 229 | elapsed 0.2 min 
+               taxon lfc_treatmentTreated se_treatmentTreated p_treatmentTreated
+    g__Cutibacterium              0.96841              0.6327          1.363e-01
+ g__Chryseobacterium             -3.55021              0.2400          2.553e-05
+   g__Staphylococcus              0.02181              0.7035          9.755e-01
+        g__Dialister             -1.97158              0.3068          1.216e-04
+ q_treatmentTreated
+           0.495514
+           0.005846
+           1.000000
+           0.013922 
+RUN E_V6_treat_randSubject_prv05 | fix = treatment | rand = (1|Subject_ID) | prv_cut = 0.05 | n = 32 | 2026-09-17 17:59:49 
+  ERROR: Encountering the error for `lmerTest` package.
+Please try to select one of your taxa and use its raw counts to fix the same linear mixed-effects model using `lmerTest` without the `ANCOMBC` package.
+Load all necessary packages EXCEPT `ANCOMBC`, and see if the error arises due to package incompatibility or other issues.
+The error message from `lmerTest` is as follows:
+number of levels of each grouping factor must be < number of observations (problems: Subject_ID) 
+DONE 2026-09-17 18:00:44 
