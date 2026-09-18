@@ -1,6 +1,6 @@
 # Topical crisaborole and the atopic dermatitis skin microbiome — analysis code and data
 
-Code and processed data for: *[Title]*, Bearss JD, Greene RK, Phong C, Nguyen C, Babadjouni A,
+Code and processed data for: *Crisaborole Modulates the Lesional Skin Microbiome in Atopic Dermatitis*, Bearss JD, Greene RK, Phong C, Nguyen C, Babadjouni A,
 Mesinkovska NA, Juhasz M. Submitted to the *Journal of Investigative Dermatology* (Letter to the Editor).
 
 Twenty patients with atopic dermatitis applied 2% crisaborole ointment to one lesion and left a
